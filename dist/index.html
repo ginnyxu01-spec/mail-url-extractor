@@ -1,0 +1,1468 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="输入 MailMomy 临时邮箱，提取最近 1 小时邮件正文中的 HTTP 和 HTTPS 链接。">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#07111f">
+  <title>邮箱链接提取器</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%2307111f'/%3E%3Cpath d='M14 20h36v25H14z' fill='none' stroke='%235ef0c3' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='m16 22 16 13 16-13' fill='none' stroke='%235ef0c3' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #07111f;
+      --bg-deep: #040a12;
+      --surface: rgba(14, 28, 47, 0.88);
+      --surface-strong: #10213a;
+      --surface-soft: #0a1728;
+      --border: rgba(161, 190, 224, 0.16);
+      --border-strong: rgba(94, 240, 195, 0.42);
+      --text: #f4f8fc;
+      --muted: #98acc3;
+      --muted-strong: #bfd0e2;
+      --accent: #5ef0c3;
+      --accent-strong: #22d3a2;
+      --accent-ink: #03251c;
+      --blue: #62a8ff;
+      --danger: #ff8b9a;
+      --warning: #ffc46b;
+      --shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 11px;
+      font-family: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      background: var(--bg-deep);
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 16% 8%, rgba(49, 111, 196, 0.22), transparent 34rem),
+        radial-gradient(circle at 88% 14%, rgba(32, 194, 151, 0.12), transparent 28rem),
+        linear-gradient(145deg, var(--bg) 0%, var(--bg-deep) 100%);
+    }
+
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      content: "";
+      opacity: 0.18;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, black, transparent 78%);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button,
+    a {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    a:focus-visible {
+      outline: 3px solid rgba(94, 240, 195, 0.38);
+      outline-offset: 3px;
+    }
+
+    .shell {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px 0 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 42px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 13px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      place-items: center;
+      border: 1px solid var(--border-strong);
+      border-radius: 13px;
+      color: var(--accent);
+      background: linear-gradient(145deg, rgba(94, 240, 195, 0.14), rgba(98, 168, 255, 0.06));
+      box-shadow: inset 0 0 22px rgba(94, 240, 195, 0.08);
+    }
+
+    .brand-mark svg {
+      width: 23px;
+      height: 23px;
+    }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
+    .brand-name {
+      margin: 0;
+      font-size: 1.03rem;
+      font-weight: 720;
+      letter-spacing: 0.02em;
+    }
+
+    .brand-note {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+    }
+
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted-strong);
+      background: rgba(8, 20, 34, 0.72);
+      font-size: 0.78rem;
+    }
+
+    .live-pill::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(94, 240, 195, 0.8);
+      content: "";
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 285px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .primary {
+      min-width: 0;
+    }
+
+    .intro {
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 13px;
+      color: var(--accent);
+      font-size: 0.76rem;
+      font-weight: 760;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      width: 28px;
+      height: 1px;
+      background: var(--accent);
+      content: "";
+    }
+
+    h1 {
+      max-width: 760px;
+      margin: 0;
+      font-size: clamp(2.1rem, 5vw, 4.25rem);
+      font-weight: 760;
+      line-height: 1.04;
+      letter-spacing: -0.055em;
+    }
+
+    .intro-copy {
+      max-width: 660px;
+      margin: 18px 0 0;
+      color: var(--muted-strong);
+      font-size: 1rem;
+      line-height: 1.75;
+    }
+
+    .query-panel {
+      position: relative;
+      overflow: hidden;
+      padding: 28px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(140deg, rgba(17, 36, 61, 0.96), rgba(9, 21, 36, 0.92));
+      box-shadow: var(--shadow);
+    }
+
+    .query-panel::before {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 3px;
+      background: linear-gradient(to bottom, var(--accent), var(--blue), transparent 88%);
+      content: "";
+    }
+
+    .field-label {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--muted-strong);
+      font-size: 0.9rem;
+      font-weight: 650;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+    }
+
+    .email-input {
+      width: 100%;
+      min-height: 124px;
+      padding: 16px 18px;
+      border: 1px solid rgba(157, 183, 216, 0.24);
+      border-radius: 14px;
+      color: var(--text);
+      background: rgba(4, 13, 24, 0.72);
+      font-size: 1rem;
+      line-height: 1.65;
+      resize: vertical;
+      transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+    }
+
+    .email-input::placeholder {
+      color: #6f859e;
+    }
+
+    .email-input:hover {
+      border-color: rgba(157, 183, 216, 0.38);
+    }
+
+    .email-input:focus {
+      border-color: var(--accent);
+      background: rgba(5, 16, 28, 0.96);
+      box-shadow: inset 0 0 0 1px rgba(94, 240, 195, 0.2);
+    }
+
+    .primary-button,
+    .secondary-button,
+    .copy-button,
+    .open-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      border-radius: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, opacity 160ms ease;
+    }
+
+    .primary-button {
+      min-height: 58px;
+      align-self: start;
+      padding: 0 24px;
+      border: 0;
+      color: var(--accent-ink);
+      background: var(--accent);
+      box-shadow: 0 12px 28px rgba(34, 211, 162, 0.18);
+    }
+
+    .primary-button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      background: #75f5ce;
+    }
+
+    .primary-button:active:not(:disabled),
+    .secondary-button:active:not(:disabled),
+    .copy-button:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .primary-button:disabled {
+      cursor: wait;
+      opacity: 0.66;
+    }
+
+    .button-icon {
+      width: 18px;
+      height: 18px;
+    }
+
+    .field-help {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: 13px 0 0;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.55;
+    }
+
+    .field-help svg {
+      width: 15px;
+      height: 15px;
+      flex: 0 0 auto;
+      margin-top: 2px;
+    }
+
+    .status {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      margin-top: 16px;
+      padding: 13px 15px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--muted-strong);
+      background: rgba(4, 13, 24, 0.52);
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+
+    .status[hidden] {
+      display: none;
+    }
+
+    .status[data-kind="error"] {
+      border-color: rgba(255, 139, 154, 0.32);
+      color: #ffd1d7;
+      background: rgba(83, 21, 35, 0.28);
+    }
+
+    .status[data-kind="success"] {
+      border-color: rgba(94, 240, 195, 0.26);
+      color: #caffef;
+      background: rgba(17, 76, 59, 0.23);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      margin-top: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status[data-kind="loading"] .status-dot {
+      animation: pulse 1.15s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      50% { opacity: 0.28; transform: scale(0.78); }
+    }
+
+    .rail {
+      position: sticky;
+      top: 24px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .rail-card {
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: rgba(9, 22, 38, 0.76);
+      backdrop-filter: blur(15px);
+    }
+
+    .rail-number {
+      display: block;
+      margin-bottom: 13px;
+      color: var(--accent);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .rail-card h2 {
+      margin: 0 0 9px;
+      font-size: 0.94rem;
+      font-weight: 720;
+    }
+
+    .rail-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.66;
+    }
+
+    .results-section {
+      margin-top: 26px;
+    }
+
+    .results-section[hidden] {
+      display: none;
+    }
+
+    .summary-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 14px;
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: rgba(9, 22, 38, 0.72);
+    }
+
+    .summary-copy {
+      min-width: 0;
+    }
+
+    .summary-title {
+      margin: 0;
+      font-size: 0.98rem;
+      font-weight: 720;
+    }
+
+    .summary-meta {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
+
+    .secondary-button {
+      min-height: 40px;
+      flex: 0 0 auto;
+      padding: 0 14px;
+      border: 1px solid rgba(94, 240, 195, 0.3);
+      color: var(--accent);
+      background: rgba(94, 240, 195, 0.07);
+      font-size: 0.82rem;
+    }
+
+    .secondary-button:hover:not(:disabled) {
+      border-color: rgba(94, 240, 195, 0.62);
+      background: rgba(94, 240, 195, 0.12);
+    }
+
+    .export-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .secondary-button[hidden] {
+      display: none;
+    }
+
+    .results-list {
+      display: grid;
+      gap: 22px;
+    }
+
+    .mailbox-group {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mailbox-group-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 0 3px;
+    }
+
+    .mailbox-address {
+      overflow: hidden;
+      margin: 0;
+      color: var(--text);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.86rem;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mailbox-stats {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+
+    .mailbox-empty {
+      padding: 18px 20px;
+      border: 1px dashed rgba(157, 183, 216, 0.22);
+      border-radius: var(--radius-md);
+      color: var(--muted);
+      background: rgba(8, 19, 33, 0.44);
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+
+    .mailbox-error {
+      border-color: rgba(255, 139, 154, 0.28);
+      color: #ffc4cc;
+      background: rgba(83, 21, 35, 0.2);
+    }
+
+    .mail-card {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: rgba(10, 23, 40, 0.85);
+    }
+
+    .mail-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(16, 34, 58, 0.58);
+    }
+
+    .mail-copy {
+      min-width: 0;
+    }
+
+    .mail-subject {
+      overflow: hidden;
+      margin: 0;
+      font-size: 0.97rem;
+      font-weight: 700;
+      line-height: 1.45;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mail-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 12px;
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 0.77rem;
+      line-height: 1.5;
+    }
+
+    .mail-count {
+      flex: 0 0 auto;
+      padding: 5px 9px;
+      border: 1px solid rgba(98, 168, 255, 0.28);
+      border-radius: 999px;
+      color: #bcd9ff;
+      background: rgba(98, 168, 255, 0.08);
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    .url-list {
+      display: grid;
+    }
+
+    .url-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 16px 20px;
+    }
+
+    .url-item + .url-item {
+      border-top: 1px solid var(--border);
+    }
+
+    .url-copy {
+      min-width: 0;
+    }
+
+    .url-topline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      margin-bottom: 7px;
+    }
+
+    .host {
+      overflow: hidden;
+      color: var(--accent);
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .link-label {
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .url-value {
+      display: block;
+      overflow: hidden;
+      color: var(--muted-strong);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.78rem;
+      line-height: 1.55;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .url-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .copy-button,
+    .open-link {
+      min-height: 36px;
+      padding: 0 11px;
+      border: 1px solid var(--border);
+      color: var(--muted-strong);
+      background: rgba(7, 17, 31, 0.74);
+      font-size: 0.76rem;
+    }
+
+    .copy-button:hover,
+    .open-link:hover {
+      border-color: rgba(94, 240, 195, 0.42);
+      color: var(--text);
+      background: rgba(94, 240, 195, 0.08);
+    }
+
+    .empty-card {
+      padding: 42px 24px;
+      border: 1px dashed rgba(157, 183, 216, 0.24);
+      border-radius: var(--radius-md);
+      text-align: center;
+      background: rgba(8, 19, 33, 0.5);
+    }
+
+    .empty-icon {
+      display: grid;
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      color: var(--muted);
+      background: rgba(16, 34, 58, 0.54);
+    }
+
+    .empty-icon svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .empty-card h2 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .empty-card p {
+      max-width: 480px;
+      margin: 9px auto 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.65;
+    }
+
+    .toast {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 20;
+      max-width: min(360px, calc(100% - 44px));
+      padding: 12px 15px;
+      border: 1px solid rgba(94, 240, 195, 0.34);
+      border-radius: 12px;
+      color: #dcfff4;
+      background: rgba(9, 35, 29, 0.96);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+      font-size: 0.84rem;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .toast[data-show="true"] {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .footer-note {
+      margin: 28px 0 0;
+      color: #70869f;
+      font-size: 0.74rem;
+      line-height: 1.65;
+    }
+
+    @media (max-width: 860px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .rail {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        order: 2;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .shell {
+        width: min(100% - 24px, 1120px);
+        padding-top: 20px;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        margin-bottom: 34px;
+      }
+
+      .brand-note,
+      .live-pill {
+        display: none;
+      }
+
+      h1 {
+        font-size: clamp(2rem, 12vw, 3.2rem);
+      }
+
+      .intro-copy {
+        font-size: 0.94rem;
+      }
+
+      .query-panel {
+        padding: 20px;
+        border-radius: 19px;
+      }
+
+      .field-row {
+        grid-template-columns: 1fr;
+      }
+
+      .primary-button {
+        width: 100%;
+      }
+
+      .rail {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-bar,
+      .mail-head,
+      .mailbox-group-head {
+        align-items: flex-start;
+      }
+
+      .summary-bar {
+        flex-direction: column;
+      }
+
+      .export-actions {
+        justify-content: flex-start;
+      }
+
+      .url-item {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .url-actions {
+        justify-content: flex-start;
+      }
+
+      .url-value {
+        overflow-wrap: anywhere;
+        text-overflow: initial;
+        white-space: normal;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand" aria-label="邮箱链接提取器">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+            <path d="m4 7 8 6 8-6"></path>
+          </svg>
+        </span>
+        <span class="brand-copy">
+          <span class="brand-name">邮箱链接提取器</span>
+          <span class="brand-note">MAILMOMY URL EXTRACTOR</span>
+        </span>
+      </div>
+      <span class="live-pill">API 实时读取</span>
+    </header>
+
+    <main class="workspace">
+      <div class="primary">
+        <section class="intro" aria-labelledby="page-title">
+          <p class="eyebrow">Link scanner</p>
+          <h1 id="page-title">批量从邮件里，找出你要的链接。</h1>
+          <p class="intro-copy">粘贴多个 MailMomy 临时邮箱，工具会并发查询，只处理最近 1 小时内收到的邮件，并提取其中的 HTTP/HTTPS 地址。</p>
+        </section>
+
+        <section class="query-panel" aria-label="查询邮箱">
+          <form id="query-form" novalidate>
+            <label class="field-label" for="emails">邮箱地址（最多 50 个）</label>
+            <div class="field-row">
+              <textarea class="email-input" id="emails" name="emails" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="例如：a@mailmomy.com-b@mailmomy.com-c@mailmomy.com" aria-describedby="email-help" required></textarea>
+              <button class="primary-button" id="submit-button" type="submit">
+                <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7"></circle>
+                  <path d="m20 20-4-4"></path>
+                </svg>
+                <span id="submit-label">批量提取</span>
+              </button>
+            </div>
+            <p class="field-help" id="email-help">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M12 11v5"></path><path d="M12 8h.01"></path>
+              </svg>
+              使用半角“-”分隔；邮箱会逐个查询，每个邮箱只读取最新邮件并保留 1 条 Facebook 邀请链接。
+            </p>
+          </form>
+          <div class="status" id="status" role="status" aria-live="polite" hidden>
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="status-text"></span>
+          </div>
+        </section>
+
+        <section class="results-section" id="results-section" aria-labelledby="results-title" hidden>
+          <div class="summary-bar">
+            <div class="summary-copy">
+              <h2 class="summary-title" id="results-title">提取结果</h2>
+              <p class="summary-meta" id="summary-meta"></p>
+            </div>
+            <div class="export-actions" aria-label="导出结果">
+              <button class="secondary-button" id="copy-document" type="button" hidden>复制 URL</button>
+              <button class="secondary-button" id="download-document" type="button" hidden>下载文档</button>
+            </div>
+          </div>
+          <div class="results-list" id="results-list"></div>
+        </section>
+
+        <p class="footer-note">安全提示：临时邮箱通常是公开可读的，邮件中的链接也可能不安全。请勿用于银行、密码重置或其他敏感信息；打开链接前先核对域名。</p>
+      </div>
+
+      <aside class="rail" aria-label="使用说明">
+        <section class="rail-card">
+          <span class="rail-number">01 / 查询</span>
+          <h2>读取邮箱邮件</h2>
+          <p>一次最多输入 50 个邮箱，使用“-”分隔；工具会逐个查询，每个邮箱只读取最新邮件。</p>
+        </section>
+        <section class="rail-card">
+          <span class="rail-number">02 / 提取</span>
+          <h2>只保留网页链接</h2>
+          <p>同时识别按钮链接与纯文本地址，只保留 http 和 https 协议。</p>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const API_URL = "https://mailmomy.com/api/mail/messages";
+      const PAGE_SIZE = 100;
+      const MAX_PAGES = 10;
+      const MAX_MAILBOXES = 50;
+      const QUERY_CONCURRENCY = 1;
+      const RECENT_WINDOW_MS = 60 * 60 * 1000;
+      const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
+      const TARGET_URL_PREFIX = "https://business.facebook.com/invitation/?token=";
+      const elements = {
+        form: document.getElementById("query-form"),
+        input: document.getElementById("emails"),
+        submit: document.getElementById("submit-button"),
+        submitLabel: document.getElementById("submit-label"),
+        status: document.getElementById("status"),
+        statusText: document.getElementById("status-text"),
+        resultsSection: document.getElementById("results-section"),
+        resultsList: document.getElementById("results-list"),
+        summaryMeta: document.getElementById("summary-meta"),
+        copyDocument: document.getElementById("copy-document"),
+        downloadDocument: document.getElementById("download-document"),
+        toast: document.getElementById("toast")
+      };
+
+      let activeController = null;
+      let currentUrls = [];
+      let currentDocument = "";
+      let toastTimer = 0;
+
+      function cleanEmail(value) {
+        return String(value || "").trim().toLowerCase();
+      }
+
+      function isValidEmail(value) {
+        if (!value || value.length > 254 || /\s/.test(value)) return false;
+        const parts = value.split("@");
+        return parts.length === 2 && parts[0].length > 0 && parts[1].includes(".") && !parts[1].startsWith(".") && !parts[1].endsWith(".");
+      }
+
+      function parseEmailInput(value) {
+        const source = String(value || "");
+        const unique = new Set();
+        const tokens = source.split(/[\s,;，；-]+/);
+        for (const token of tokens) {
+          const matches = token.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+          for (const match of matches) {
+            const email = cleanEmail(match);
+            if (email) unique.add(email);
+          }
+        }
+        return Array.from(unique);
+      }
+
+      function setBusy(busy) {
+        elements.submit.disabled = busy;
+        elements.input.disabled = busy;
+        elements.submitLabel.textContent = busy ? "正在查询…" : "批量提取";
+        elements.form.setAttribute("aria-busy", String(busy));
+      }
+
+      function setStatus(kind, message) {
+        if (!message) {
+          elements.status.hidden = true;
+          elements.statusText.textContent = "";
+          elements.status.removeAttribute("data-kind");
+          return;
+        }
+        elements.status.hidden = false;
+        elements.status.dataset.kind = kind;
+        elements.statusText.textContent = message;
+      }
+
+      function showToast(message) {
+        window.clearTimeout(toastTimer);
+        elements.toast.textContent = message;
+        elements.toast.dataset.show = "true";
+        toastTimer = window.setTimeout(() => {
+          elements.toast.dataset.show = "false";
+        }, 2200);
+      }
+
+      function stripTrailingPunctuation(value) {
+        let result = value;
+        while (/[\s.,;:!?。，；：！？、'"’”\]}》】）>]$/.test(result)) {
+          result = result.slice(0, -1);
+        }
+        return result;
+      }
+
+      function normalizeWebUrl(value) {
+        try {
+          const candidate = stripTrailingPunctuation(String(value || "").trim());
+          const parsed = new URL(candidate);
+          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+          return parsed.href;
+        } catch {
+          return null;
+        }
+      }
+
+      function extractUrls(message) {
+        const source = typeof message === "string" ? message : "";
+        if (!source) return [];
+
+        const found = new Map();
+        const parsed = new DOMParser().parseFromString(source, "text/html");
+
+        for (const anchor of parsed.querySelectorAll("a[href]")) {
+          const url = normalizeWebUrl(anchor.getAttribute("href"));
+          if (!url || found.has(url)) continue;
+          const label = (anchor.textContent || "").replace(/\s+/g, " ").trim();
+          found.set(url, { url, label: label.slice(0, 100), source: "按钮链接" });
+        }
+
+        const text = parsed.body ? parsed.body.textContent || "" : source;
+        const matches = text.match(/https?:\/\/[^\s<>"']+/gi) || [];
+        for (const match of matches) {
+          const url = normalizeWebUrl(match);
+          if (!url || found.has(url)) continue;
+          found.set(url, { url, label: "", source: "文本链接" });
+        }
+
+        return Array.from(found.values());
+      }
+
+      async function fetchPage(email, page, signal) {
+        const query = new URLSearchParams({
+          to: email,
+          page: String(page),
+          limit: String(PAGE_SIZE)
+        });
+        const response = await fetch(`${API_URL}?${query.toString()}`, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal
+        });
+
+        if (!response.ok) {
+          const body = (await response.text()).trim();
+          throw new Error(body || `接口返回了 ${response.status}`);
+        }
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          throw new Error("接口返回了无法识别的数据格式");
+        }
+
+        const data = await response.json();
+        return {
+          emails: Array.isArray(data.emails) ? data.emails : [],
+          total: Number.isFinite(Number(data.total)) ? Number(data.total) : 0,
+          pages: Number.isFinite(Number(data.pages)) ? Number(data.pages) : 0
+        };
+      }
+
+      async function fetchMailbox(email, signal) {
+        const first = await fetchPage(email, 1, signal);
+        const availablePages = Math.max(1, first.pages || 1);
+        const pagesToRead = Math.min(availablePages, MAX_PAGES);
+        const allEmails = [...first.emails];
+
+        for (let page = 2; page <= pagesToRead; page += 3) {
+          const batch = [];
+          for (let offset = 0; offset < 3 && page + offset <= pagesToRead; offset += 1) {
+            batch.push(fetchPage(email, page + offset, signal));
+          }
+          const results = await Promise.all(batch);
+          for (const result of results) allEmails.push(...result.emails);
+        }
+
+        const deduped = [];
+        const seenIds = new Set();
+        for (const emailItem of allEmails) {
+          const identity = String(emailItem && emailItem.id || `${emailItem && emailItem.from}|${emailItem && emailItem.subject}|${emailItem && emailItem.receivedAt}`);
+          if (seenIds.has(identity)) continue;
+          seenIds.add(identity);
+          deduped.push(emailItem || {});
+        }
+
+        return {
+          emails: deduped,
+          total: first.total,
+          complete: availablePages <= MAX_PAGES
+        };
+      }
+
+      function createElement(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      function buildEmpty(title, copy) {
+        const card = createElement("div", "empty-card");
+        const icon = createElement("div", "empty-icon");
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>';
+        card.append(icon, createElement("h2", "", title), createElement("p", "", copy));
+        return card;
+      }
+
+      async function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.append(area);
+        area.select();
+        const copied = document.execCommand("copy");
+        area.remove();
+        if (!copied) throw new Error("复制失败");
+      }
+
+      function parseReceivedAt(value) {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          return value < 1e12 ? value * 1000 : value;
+        }
+
+        const source = String(value || "").trim();
+        if (!source) return null;
+
+        // MailMomy 文档中的 receivedAt 不带时区，但 webhook 的同一时间戳标为 UTC。
+        const naiveUtc = source.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/);
+        const timestamp = naiveUtc
+          ? Date.parse(`${naiveUtc[1]}T${naiveUtc[2]}Z`)
+          : Date.parse(source);
+        return Number.isFinite(timestamp) ? timestamp : null;
+      }
+
+      function isRecentEmail(emailItem, now) {
+        const receivedAt = parseReceivedAt(emailItem && emailItem.receivedAt);
+        if (receivedAt === null) return false;
+        const age = now - receivedAt;
+        return age >= -FUTURE_TOLERANCE_MS && age <= RECENT_WINDOW_MS;
+      }
+
+      function formatReceivedAt(value) {
+        const timestamp = parseReceivedAt(value);
+        if (timestamp === null) return String(value || "未知");
+        return new Intl.DateTimeFormat("zh-CN", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false
+        }).format(new Date(timestamp));
+      }
+
+      function createMailCard(entry) {
+          const card = createElement("article", "mail-card");
+          const head = createElement("header", "mail-head");
+          const copy = createElement("div", "mail-copy");
+          const subject = createElement("h3", "mail-subject", String(entry.email.subject || "无主题邮件"));
+          subject.title = subject.textContent;
+          const meta = createElement("p", "mail-meta");
+          meta.append(
+            createElement("span", "", `发件人：${String(entry.email.from || "未知")}`),
+            createElement("span", "", `时间：${formatReceivedAt(entry.email.receivedAt)}`)
+          );
+          copy.append(subject, meta);
+          head.append(copy, createElement("span", "mail-count", `${entry.links.length} 个链接`));
+
+          const list = createElement("div", "url-list");
+          for (const link of entry.links) {
+            const row = createElement("div", "url-item");
+            const linkCopy = createElement("div", "url-copy");
+            const topLine = createElement("div", "url-topline");
+            let host = "未知域名";
+            try { host = new URL(link.url).hostname; } catch { /* URL 已在提取阶段验证 */ }
+            topLine.append(createElement("span", "host", host));
+            const label = link.label || link.source;
+            topLine.append(createElement("span", "link-label", `· ${label}`));
+            const value = createElement("code", "url-value", link.url);
+            value.title = link.url;
+            linkCopy.append(topLine, value);
+
+            const actions = createElement("div", "url-actions");
+            const copyButton = createElement("button", "copy-button", "复制");
+            copyButton.type = "button";
+            copyButton.addEventListener("click", async () => {
+              try {
+                await copyText(link.url);
+                showToast("链接已复制");
+              } catch {
+                showToast("复制失败，请手动选择链接");
+              }
+            });
+            const open = createElement("a", "open-link", "打开");
+            open.href = link.url;
+            open.target = "_blank";
+            open.rel = "noopener noreferrer";
+            open.setAttribute("aria-label", `打开 ${host} 的链接（新窗口）`);
+            actions.append(copyButton, open);
+            row.append(linkCopy, actions);
+            list.append(row);
+          }
+
+          card.append(head, list);
+          return card;
+      }
+
+      async function loadMailboxResult(address, signal) {
+        try {
+          const mailbox = await fetchMailbox(address, signal);
+          const now = Date.now();
+          const recentEmails = mailbox.emails.filter((emailItem) => isRecentEmail(emailItem, now));
+          const newestEmail = [...recentEmails]
+            .sort((left, right) => (parseReceivedAt(right && right.receivedAt) || 0) - (parseReceivedAt(left && left.receivedAt) || 0))
+            .slice(0, 1);
+          const enriched = newestEmail.map((emailItem) => ({
+            email: emailItem,
+            links: extractUrls(emailItem.message || emailItem.bodyText || "")
+              .filter((link) => link.url.startsWith(TARGET_URL_PREFIX))
+          }));
+          const withLinks = enriched
+            .map((item) => ({ ...item, links: item.links.slice(0, 1) }))
+            .filter((item) => item.links.length > 0);
+          const urls = Array.from(new Set(withLinks.flatMap((item) => item.links.map((link) => link.url))));
+          return { address, mailbox, recentEmails, withLinks, urls, error: null };
+        } catch (error) {
+          if (error && error.name === "AbortError") throw error;
+          const message = error instanceof TypeError
+            ? "无法连接 MailMomy API，请检查网络。"
+            : String(error && error.message || "未知错误");
+          return { address, mailbox: null, recentEmails: [], withLinks: [], urls: [], error: message };
+        }
+      }
+
+      async function mapWithConcurrency(items, limit, worker) {
+        const output = new Array(items.length);
+        let nextIndex = 0;
+        async function run() {
+          while (nextIndex < items.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            output[index] = await worker(items[index], index);
+          }
+        }
+        const count = Math.min(limit, items.length);
+        await Promise.all(Array.from({ length: count }, () => run()));
+        return output;
+      }
+
+      function buildExportDocument(results) {
+        const urls = Array.from(new Set(results.flatMap((result) => result.urls)));
+        return urls.length ? `${urls.join("\n")}\n` : "";
+      }
+
+      function appendMailboxMessage(group, text, error) {
+        group.append(createElement("div", `mailbox-empty${error ? " mailbox-error" : ""}`, text));
+      }
+
+      function renderBatch(results) {
+        elements.resultsList.replaceChildren();
+        elements.resultsSection.hidden = false;
+
+        const successful = results.filter((result) => !result.error);
+        const failureCount = results.length - successful.length;
+        const emailCount = successful.reduce((sum, result) => sum + result.recentEmails.length, 0);
+        const scannedEmailCount = successful.reduce((sum, result) => sum + result.mailbox.emails.length, 0);
+        currentUrls = Array.from(new Set(successful.flatMap((result) => result.urls)));
+        currentDocument = buildExportDocument(results);
+        elements.copyDocument.hidden = currentUrls.length === 0;
+        elements.downloadDocument.hidden = currentUrls.length === 0;
+        elements.summaryMeta.textContent = `已查询 ${results.length} 个邮箱 · 最近 1 小时 ${emailCount} 封邮件 · ${currentUrls.length} 个不重复链接${failureCount ? ` · ${failureCount} 个失败` : ""}`;
+
+        for (const result of results) {
+          const group = createElement("section", "mailbox-group");
+          const head = createElement("div", "mailbox-group-head");
+          head.append(
+            createElement("h3", "mailbox-address", result.address),
+            createElement("span", "mailbox-stats", result.error ? "查询失败" : `${result.recentEmails.length} 封新邮件 · ${result.urls.length} 个链接`)
+          );
+          group.append(head);
+
+          if (result.error) {
+            appendMailboxMessage(group, `查询失败：${result.error}`, true);
+          } else if (result.mailbox.emails.length === 0) {
+            appendMailboxMessage(group, "这个邮箱目前没有收到邮件。", false);
+          } else if (result.recentEmails.length === 0) {
+            appendMailboxMessage(group, "最近 1 小时没有新邮件，旧邮件已忽略。", false);
+          } else if (result.withLinks.length === 0) {
+            appendMailboxMessage(group, "最近 1 小时有新邮件，但没有匹配的 Facebook 邀请链接。", false);
+          } else {
+            for (const entry of result.withLinks) group.append(createMailCard(entry));
+          }
+          elements.resultsList.append(group);
+        }
+
+        return {
+          mailboxCount: results.length,
+          successCount: successful.length,
+          failureCount,
+          emailCount,
+          scannedEmailCount,
+          urlCount: currentUrls.length,
+          urls: currentUrls
+        };
+      }
+
+      async function queryBatchAndRender(rawInput) {
+        const emails = parseEmailInput(rawInput);
+        if (emails.length === 0) {
+          elements.input.setAttribute("aria-invalid", "true");
+          elements.input.focus();
+          setStatus("error", "请输入至少一个完整邮箱地址。多个邮箱请用半角 - 分开。");
+          throw new Error("没有可查询的邮箱");
+        }
+
+        const invalid = emails.filter((email) => !isValidEmail(email));
+        if (invalid.length > 0) {
+          elements.input.setAttribute("aria-invalid", "true");
+          elements.input.focus();
+          setStatus("error", `这些邮箱格式不正确：${invalid.slice(0, 3).join("、")}${invalid.length > 3 ? "…" : ""}`);
+          throw new Error("邮箱格式不正确");
+        }
+
+        if (emails.length > MAX_MAILBOXES) {
+          elements.input.setAttribute("aria-invalid", "true");
+          elements.input.focus();
+          setStatus("error", `一次最多查询 ${MAX_MAILBOXES} 个邮箱；当前识别到 ${emails.length} 个。`);
+          throw new Error("邮箱数量超过限制");
+        }
+
+        elements.input.removeAttribute("aria-invalid");
+        if (activeController) activeController.abort();
+        activeController = new AbortController();
+        setBusy(true);
+        elements.resultsSection.hidden = true;
+        currentUrls = [];
+        currentDocument = "";
+        elements.copyDocument.hidden = true;
+        elements.downloadDocument.hidden = true;
+        setStatus("loading", `正在查询 0 / ${emails.length} 个邮箱…`);
+
+        try {
+          let completed = 0;
+          const results = await mapWithConcurrency(emails, QUERY_CONCURRENCY, async (address) => {
+            const result = await loadMailboxResult(address, activeController.signal);
+            completed += 1;
+            setStatus("loading", `正在查询 ${completed} / ${emails.length} 个邮箱…`);
+            return result;
+          });
+          const summary = renderBatch(results);
+          const message = summary.failureCount
+            ? `查询完成：成功 ${summary.successCount} 个，失败 ${summary.failureCount} 个，找到 ${summary.urlCount} 个不重复链接。`
+            : `批量提取完成：${summary.mailboxCount} 个邮箱，找到 ${summary.urlCount} 个不重复链接。`;
+          setStatus("success", message);
+          elements.resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
+          return { emails, ...summary, windowMinutes: 60 };
+        } catch (error) {
+          if (error && error.name === "AbortError") throw error;
+          const message = `读取失败：${error && error.message ? error.message : "未知错误"}`;
+          setStatus("error", message);
+          throw error;
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      elements.form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try {
+          await queryBatchAndRender(elements.input.value);
+        } catch (error) {
+          if (!error || error.name !== "AbortError") {
+            // 错误已在界面中显示。
+          }
+        }
+      });
+
+      elements.input.addEventListener("input", () => {
+        elements.input.removeAttribute("aria-invalid");
+        if (elements.status.dataset.kind === "error") setStatus("", "");
+      });
+
+      elements.copyDocument.addEventListener("click", async () => {
+        if (!currentDocument) return;
+        try {
+          await copyText(currentDocument);
+          showToast(`已复制 ${currentUrls.length} 个 URL`);
+        } catch {
+          showToast("复制失败，请重试");
+        }
+      });
+
+      elements.downloadDocument.addEventListener("click", () => {
+        if (!currentDocument) return;
+        const blob = new Blob([currentDocument], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `mailmomy-links-${new Date().toISOString().slice(0, 10)}.txt`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        showToast("文档已下载");
+      });
+
+      const context = document.modelContext;
+      if (context && typeof context.registerTool === "function") {
+        const lifecycle = new AbortController();
+        window.addEventListener("pagehide", () => lifecycle.abort(), { once: true });
+        try {
+          Promise.resolve(context.registerTool({
+            name: "extract_mail_urls",
+            title: "批量提取邮箱链接",
+            description: "批量读取最多 50 个 MailMomy 临时邮箱，只处理最近 1 小时内收到的邮件，并展示及返回其中的 HTTP/HTTPS 链接。",
+            inputSchema: {
+              type: "object",
+              properties: {
+                emails: {
+                  type: "array",
+                  description: "要查询的完整邮箱地址列表",
+                  items: { type: "string" },
+                  minItems: 1,
+                  maxItems: 50
+                }
+              },
+              required: ["emails"],
+              additionalProperties: false
+            },
+            annotations: {
+              readOnlyHint: true,
+              untrustedContentHint: true
+            },
+            async execute(input) {
+              if (!input || !Array.isArray(input.emails)) throw new Error("emails 必须是邮箱数组");
+              return queryBatchAndRender(input.emails.join("\n"));
+            }
+          }, { signal: lifecycle.signal })).catch(() => {});
+        } catch {
+          // 不支持 WebMCP 的浏览器仍可正常使用页面。
+        }
+      }
+    })();
+  </script>
+</body>
+</html>
